@@ -19,8 +19,8 @@ const SCRAPER_TASK_TYPES = {
   'gemini-web': 'GEMINI',
 };
 
-const DEFAULT_MAX_WAIT_MS = 10 * 60 * 1000; // 10 minutes
-const DEFAULT_POLL_INTERVAL_MS = 5000; // 5 seconds
+const DEFAULT_MAX_WAIT_MS = 30 * 60 * 1000; // 30 minutes
+const DEFAULT_POLL_INTERVAL_MS = 10000; // 10 seconds
 
 function getApiKey() {
   const key = process.env.CLORO_API_KEY;
