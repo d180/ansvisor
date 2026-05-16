@@ -55,6 +55,16 @@ API directly from this skill (that's a different skill).
   - `totals.totalCitations` — total citations to the brand's domains
   - `topCompetitors[]` — up to 5 competitors with `name`, `mentions`,
     `avgVisibility`
+- **`list_topics`** — given a `brand_id`, returns the topics on that
+  brand with `prompt_count` per topic. Use this for coverage audits
+  (empty topics, lopsided distribution) and as the first call before
+  drilling into prompts.
+- **`list_prompts`** — given a `brand_id` (and optional `topic_id`,
+  `is_active`, `limit`), returns prompts with `text`, `topic_name`,
+  `platforms[]`, `models[]`, `regions[]`, `is_active`, `created_at`.
+  Default limit 100, max 500. Use this when the user wants to see
+  what's actually being tracked, or to spot inactive / mis-targeted
+  prompts.
 
 More tools land regularly. If a tool you'd want isn't here, say so out
 loud rather than faking it.
@@ -141,6 +151,61 @@ When the user asks who they're up against:
 
 4. Optionally compare with last week's data (same date trick as
    workflow 2) to flag whether a competitor is surging or fading.
+
+### 4. Prompt coverage audit
+
+When the user asks _"what am I tracking?"_, _"are my topics balanced?"_,
+or any "do I have gaps" question:
+
+1. Call `list_topics(brand_id)`.
+2. Read the `prompt_count` per topic. A healthy brand usually has
+   **3–8 prompts per topic** — anything outside that band is worth
+   flagging.
+3. Report shape, not raw dump. Template:
+
+   > **Topic coverage — `<brand_name>`**
+   >
+   > **`<n>` topics**, **`<total>` prompts** (avg `<x>` per topic)
+   >
+   > **Gaps:**
+   > - `<topic_a>` — 0 prompts (empty, not being tracked)
+   > - `<topic_b>` — 1 prompt (under-covered)
+   >
+   > **Concentration:**
+   > - `<topic_c>` — 14 prompts (over half your total, consider
+   >   splitting)
+   >
+   > **Next:** `<one concrete suggestion>`
+
+4. Empty topics are often the biggest unlock — point at them first.
+   See [`references/prompt-writing-tips.md`](references/prompt-writing-tips.md)
+   for what kinds of prompts to add.
+
+### 5. Prompt deep-dive
+
+When the user asks _"what prompts are in topic X?"_ or _"show me my
+prompts for `<theme>`"_:
+
+1. If they named a topic by name, call `list_topics(brand_id)` first
+   to resolve the topic name to its `id`.
+2. Call `list_prompts(brand_id, topic_id)`.
+3. Report as a short list with the operational signals (platforms,
+   models, active status), not a wall of text:
+
+   > **`<topic_name>` — `<n>` prompts**
+   >
+   > 1. _"`<prompt text>`"_
+   >    → `<platforms.length>` platforms, `<models.length>` models,
+   >    `<regions.length>` regions, **active**
+   > 2. ...
+   >
+   > **Inactive:** `<n>` prompts (paused)
+   > **Coverage gap:** `<observation>`
+
+4. Flag inactive prompts explicitly — users often forget they paused
+   something and that's why visibility on that slice is flat.
+5. If a prompt has zero platforms or zero models, it's effectively
+   silent — surface that as a misconfiguration.
 
 ## Formatting principles
 

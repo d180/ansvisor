@@ -161,3 +161,163 @@ export async function getVisibilitySummaryFor(
     topCompetitors,
   };
 }
+
+// ── Topics ────────────────────────────────────────────────────────────────────
+
+export interface TopicRow {
+  id: string;
+  name: string;
+  is_active: boolean;
+  prompt_count: number;
+  created_at: string;
+}
+
+export async function listTopicsFor(
+  auth: McpAuthContext,
+  brandId: string,
+): Promise<TopicRow[] | null> {
+  if (!auth.organizationId) return null;
+
+  // Ownership check — make sure the brand belongs to the caller's org.
+  const { data: brand } = await supabaseAdmin
+    .from('brands')
+    .select('id')
+    .eq('id', brandId)
+    .eq('organization_id', auth.organizationId)
+    .maybeSingle();
+  if (!brand) return null;
+
+  const { data: topics, error: tErr } = await supabaseAdmin
+    .from('topics')
+    .select('id, name, is_active, created_at')
+    .eq('brand_id', brandId)
+    .order('created_at', { ascending: true });
+  if (tErr) throw new Error(tErr.message);
+
+  const topicRows = (topics ?? []) as Array<{
+    id: string;
+    name: string;
+    is_active: boolean | null;
+    created_at: string;
+  }>;
+  if (topicRows.length === 0) return [];
+
+  // Count prompts per topic in one round trip (instead of N+1) by selecting
+  // topic_id from prompts joined to prompt_sets for this brand and bucketing
+  // client-side. Topic-less prompts (topic_id null) are intentionally
+  // dropped here — they show up in list_prompts but don't add to any topic.
+  const { data: prompts } = await supabaseAdmin
+    .from('prompts')
+    .select('topic_id, prompt_sets!inner(brand_id)')
+    .eq('prompt_sets.brand_id', brandId)
+    .not('topic_id', 'is', null);
+
+  const promptRows =
+    (prompts as Array<{ topic_id: string | null }> | null) ?? [];
+  const countByTopic = new Map<string, number>();
+  for (const row of promptRows) {
+    if (!row.topic_id) continue;
+    countByTopic.set(row.topic_id, (countByTopic.get(row.topic_id) ?? 0) + 1);
+  }
+
+  return topicRows.map((t) => ({
+    id: t.id,
+    name: t.name,
+    is_active: t.is_active ?? true,
+    prompt_count: countByTopic.get(t.id) ?? 0,
+    created_at: t.created_at,
+  }));
+}
+
+// ── Prompts ───────────────────────────────────────────────────────────────────
+
+export interface PromptRow {
+  id: string;
+  text: string;
+  topic_id: string | null;
+  topic_name: string | null;
+  platforms: string[];
+  models: string[];
+  regions: string[];
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ListPromptsParams {
+  brandId: string;
+  topicId?: string;
+  isActive?: boolean;
+  limit?: number;
+}
+
+const PROMPT_LIST_DEFAULT_LIMIT = 100;
+const PROMPT_LIST_MAX_LIMIT = 500;
+
+export async function listPromptsFor(
+  auth: McpAuthContext,
+  params: ListPromptsParams,
+): Promise<PromptRow[] | null> {
+  if (!auth.organizationId) return null;
+
+  const { data: brand } = await supabaseAdmin
+    .from('brands')
+    .select('id')
+    .eq('id', params.brandId)
+    .eq('organization_id', auth.organizationId)
+    .maybeSingle();
+  if (!brand) return null;
+
+  const limit = Math.min(
+    Math.max(params.limit ?? PROMPT_LIST_DEFAULT_LIMIT, 1),
+    PROMPT_LIST_MAX_LIMIT,
+  );
+
+  let query = supabaseAdmin
+    .from('prompts')
+    .select(
+      'id, text, topic_id, platforms, models, regions, is_active, created_at, prompt_sets!inner(brand_id), topics(name)',
+    )
+    .eq('prompt_sets.brand_id', params.brandId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (params.topicId) query = query.eq('topic_id', params.topicId);
+  if (typeof params.isActive === 'boolean') {
+    query = query.eq('is_active', params.isActive);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  // Supabase's generated types model the prompts→topics FK as an array (it
+  // can't tell single vs many from the schema alone), so the join returns
+  // `topics: { name }[]` rather than `topics: { name } | null`. We know it's
+  // a single relation, so peel the first element off.
+  const rows =
+    (data as unknown as Array<{
+      id: string;
+      text: string;
+      topic_id: string | null;
+      platforms: string[] | null;
+      models: string[] | null;
+      regions: string[] | null;
+      is_active: boolean;
+      created_at: string;
+      topics: Array<{ name: string }> | { name: string } | null;
+    }> | null) ?? [];
+
+  return rows.map((r) => {
+    const topic = Array.isArray(r.topics) ? r.topics[0] ?? null : r.topics;
+    return {
+      id: r.id,
+      text: r.text,
+      topic_id: r.topic_id,
+      topic_name: topic?.name ?? null,
+      platforms: r.platforms ?? [],
+      models: r.models ?? [],
+      regions: r.regions ?? [],
+      is_active: r.is_active,
+      created_at: r.created_at,
+    };
+  });
+}

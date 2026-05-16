@@ -55,6 +55,8 @@ instead.
 | --- | --- |
 | `list_brands` | List brands the authenticated user can access. |
 | `get_visibility_summary` | Aggregate visibility score, mentions, citations, top competitors for a brand over an optional date range / model / region. |
+| `list_topics` | List the topics on a brand with a prompt count per topic. Use for coverage audits (empty / over-concentrated topics). |
+| `list_prompts` | List the prompts tracked on a brand, optionally filtered by topic, active status, or capped via `limit`. Returns the prompt text, topic, platforms, models, regions, and active flag. |
 
 More tools land regularly — check the [project roadmap](https://github.com/aeohub/ansvisor#whats-next).
 
@@ -64,6 +66,8 @@ Ask your client things like:
 
 - _"List my Ansvisor brands."_
 - _"What's my visibility score on ChatGPT for the last 7 days?"_
+- _"Are my topics balanced?" / "Which topic has the most prompts?"_
+- _"Show me the prompts in my pricing topic."_
 - _"Who are my top 5 competitors by mention count this month?"_
 
 The model picks the right tool, fills in the brand id and filters, and

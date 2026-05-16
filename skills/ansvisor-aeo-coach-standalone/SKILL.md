@@ -84,6 +84,33 @@ timestamps), `model` (slug or comma-separated slugs), `region`.
 }
 ```
 
+### `GET /api/mcp/topics`
+
+Required query: `brand_id`. Returns topics on the brand with prompt
+counts. Use for coverage audits.
+
+```json
+{ "topics": [
+    { "id": "uuid", "name": "Pricing", "is_active": true,
+      "prompt_count": 6, "created_at": "..." }
+] }
+```
+
+### `GET /api/mcp/prompts`
+
+Required query: `brand_id`. Optional: `topic_id`, `is_active`
+(`true`/`false`), `limit` (default 100, max 500).
+
+```json
+{ "prompts": [
+    { "id": "uuid", "text": "best ai for ...",
+      "topic_id": "uuid", "topic_name": "Comparisons",
+      "platforms": ["chatgpt", "perplexity"],
+      "models": ["gpt-5-5"], "regions": ["US", "TR"],
+      "is_active": true, "created_at": "..." }
+] }
+```
+
 ### `GET /api/mcp/whoami` (optional sanity check)
 
 Returns `{ userId, email, organizationId }`. Use to confirm the key
@@ -206,6 +233,60 @@ When the user asks who they're up against:
 
 4. Optionally compare with last week's data (same date trick as
    workflow 2) to flag whether a competitor is surging or fading.
+
+### 4. Prompt coverage audit
+
+When the user asks _"what am I tracking?"_, _"are my topics balanced?"_,
+or any "do I have gaps" question:
+
+1. Call `/api/mcp/topics?brand_id=...`.
+2. Read `prompt_count` per topic. Healthy band is **3–8 prompts per
+   topic**; anything outside is worth flagging.
+3. Report shape, not raw dump. Template:
+
+   > **Topic coverage — `<brand_name>`**
+   >
+   > **`<n>` topics**, **`<total>` prompts** (avg `<x>` per topic)
+   >
+   > **Gaps:**
+   > - `<topic_a>` — 0 prompts (empty, not being tracked)
+   > - `<topic_b>` — 1 prompt (under-covered)
+   >
+   > **Concentration:**
+   > - `<topic_c>` — 14 prompts (over half your total, consider
+   >   splitting)
+   >
+   > **Next:** `<one concrete suggestion>`
+
+4. Empty topics are often the biggest unlock — point at them first.
+   See [`references/prompt-writing-tips.md`](references/prompt-writing-tips.md)
+   for what kinds of prompts to add.
+
+### 5. Prompt deep-dive
+
+When the user asks _"what prompts are in topic X?"_ or _"show me my
+prompts for `<theme>`"_:
+
+1. If they named a topic by name, call `/api/mcp/topics?brand_id=...`
+   first to resolve the topic name to its `id`.
+2. Call `/api/mcp/prompts?brand_id=...&topic_id=...`.
+3. Report as a short list with operational signals (platforms, models,
+   active status), not a wall of text:
+
+   > **`<topic_name>` — `<n>` prompts**
+   >
+   > 1. _"`<prompt text>`"_
+   >    → `<platforms.length>` platforms, `<models.length>` models,
+   >    `<regions.length>` regions, **active**
+   > 2. ...
+   >
+   > **Inactive:** `<n>` prompts (paused)
+   > **Coverage gap:** `<observation>`
+
+4. Flag inactive prompts explicitly — users often forget they paused
+   something and that's why visibility on that slice is flat.
+5. If a prompt has zero `platforms` or zero `models`, it's effectively
+   silent — surface that as a misconfiguration.
 
 ## Formatting principles
 
