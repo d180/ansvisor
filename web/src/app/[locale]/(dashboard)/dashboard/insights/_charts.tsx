@@ -23,6 +23,25 @@ import type {
   SoVTrendPoint,
 } from '@/lib/actions/tracking';
 
+// ─── Adaptive Y-axis ─────────────────────────────────────────────────────────
+// Visibility scores are theoretically 0–100 but realistic values for most
+// brands cluster in the 5–30 band. Pinning the Y-axis to 100 makes bars look
+// uniformly stubby and kills the perceived difference between, say, 8 and 22.
+// We rescale upward with 30% headroom, but snap to a "nice" tick value so
+// gridlines stay clean — and keep a minimum ceiling of 20 so very low values
+// don't look absurdly zoomed (a 3-point chart shouldn't fill the canvas).
+
+const NICE_YMAX_STEPS = [20, 25, 30, 40, 50, 60, 80, 100] as const;
+
+function niceVisibilityYMax(values: number[]): number {
+  if (values.length === 0) return 20;
+  const actualMax = Math.max(0, ...values);
+  if (actualMax <= 0) return 20;
+  const target = actualMax * 1.3;
+  for (const step of NICE_YMAX_STEPS) if (target <= step) return step;
+  return 100;
+}
+
 // ─── Auto-sizing wrapper ─────────────────────────────────────────────────────
 // Replaces ResponsiveContainer which has issues with React 19
 
@@ -409,6 +428,16 @@ export function CompetitorChart({
 }) {
   const brandNames = brands.slice(0, 5).map((b) => b.name);
 
+  // Pull every numeric visibility value across all brands × providers and
+  // pick a sensible upper bound. See niceVisibilityYMax for the rules.
+  const yMax = niceVisibilityYMax(
+    providerRows.flatMap((row) =>
+      brandNames
+        .map((name) => row[name])
+        .filter((v): v is number => typeof v === 'number'),
+    ),
+  );
+
   return (
     <ChartContainer height={320}>
       {(width) => (
@@ -437,7 +466,7 @@ export function CompetitorChart({
             tickLine={false}
             axisLine={false}
             className="fill-muted-foreground"
-            domain={[0, 100]}
+            domain={[0, yMax]}
             tickFormatter={(v: number) => `${v}%`}
           />
           <Tooltip
