@@ -7,8 +7,8 @@ import { useTranslations } from 'next-intl';
 import { usePathname, Link } from '@/i18n/navigation';
 import { dashboardNav } from '@/config/dashboard';
 import { useSidebarStore } from '@/stores/use-sidebar-store';
+import { useBrandStore } from '@/stores/use-brand-store';
 import { useFeatureGate } from '@/hooks/use-feature-gate';
-import { usePlanContext } from '@/components/providers/plan-provider';
 import { siteConfig } from '@/config/site';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -25,11 +25,14 @@ export function Sidebar() {
   const t = useTranslations('nav');
   const tBrands = useTranslations('brands');
   const { canUse, requiredPlanFor, isCloud } = useFeatureGate();
-  const { shoppingModeEnabled } = usePlanContext();
-  // Map from a NavItem.requiresOrgPref key to its current value. Sidebar
-  // hides the item entirely when this returns false — see #155 for why
-  // Shopping uses this on top of the existing plan-feature gate.
-  const orgPrefs = { shoppingModeEnabled };
+  // Brand-scoped gates follow the active brand, not the org. Selecting the
+  // derived brand keeps this reactive: switching brands via BrandSwitcher or
+  // toggling the flag in Brand Settings flips the gate without a route change.
+  const activeBrand = useBrandStore((s) => s.brands.find((b) => b.id === s.activeBrandId) ?? null);
+  // Map from a NavItem.requiresBrandPref key to the active brand's value.
+  // Sidebar hides the item entirely when this returns false — see #155/#170
+  // for why Shopping uses this on top of the existing plan-feature gate.
+  const brandPrefs = { shoppingModeEnabled: !!activeBrand?.shoppingModeEnabled };
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   // Hydration guard: SSR can't know the resolved theme, so we render the
@@ -100,10 +103,10 @@ export function Sidebar() {
             {group.title && isCollapsed && i > 0 && <Separator className="my-2" />}
             <nav className="space-y-0.5">
               {group.items.map((item) => {
-                // Hide entirely if a required org preference is off — the
-                // user shouldn't see "Shopping (upgrade)" when they're
-                // simply not in e-commerce.
-                if (item.requiresOrgPref && !orgPrefs[item.requiresOrgPref]) {
+                // Hide entirely if a required brand preference is off — the
+                // user shouldn't see "Shopping (upgrade)" when the active
+                // brand simply isn't in e-commerce.
+                if (item.requiresBrandPref && !brandPrefs[item.requiresBrandPref]) {
                   return null;
                 }
 
