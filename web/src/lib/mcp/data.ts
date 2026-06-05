@@ -1406,3 +1406,219 @@ export async function getPromptVolumesFor(
     };
   });
 }
+
+// ── Shopping Cards ────────────────────────────────────────────────────────────
+
+export interface ListShoppingCardsParams {
+  brandId: string;
+  role?: 'own' | 'competitor' | 'other';
+  platform?: string;
+  region?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface ShoppingCardRow {
+  id: string;
+  prompt_result_id: string;
+  brand_id: string;
+  position: number;
+  product_title: string | null;
+  product_brand: string | null;
+  price_amount: number | null;
+  price_currency: string | null;
+  image_url: string | null;
+  merchant_url: string | null;
+  merchant_domain: string | null;
+  rating: number | null;
+  review_count: number | null;
+  raw: Record<string, unknown>;
+  matched_brand_id: string | null;
+  matched_brand_role: string;
+  platform: string;
+  region: string | null;
+  created_at: string;
+}
+
+export interface ListShoppingCardsOutput {
+  cards: ShoppingCardRow[];
+  next_cursor: string | null;
+}
+
+export async function listShoppingCards(
+  auth: McpAuthContext,
+  params: ListShoppingCardsParams,
+): Promise<ListShoppingCardsOutput | null> {
+  if (!auth.organizationId) return null;
+
+  // Brand ownership check
+  const { data: brand } = await supabaseAdmin
+    .from('brands')
+    .select('id')
+    .eq('id', params.brandId)
+    .eq('organization_id', auth.organizationId)
+    .maybeSingle();
+  if (!brand) return null;
+
+  const finalLimit = Math.min(Math.max(params.limit ?? 50, 1), 200);
+
+  let cursorData: { created_at: string; id: string } | null = null;
+  if (params.cursor) {
+    try {
+      cursorData = JSON.parse(Buffer.from(params.cursor, 'base64').toString('utf8'));
+    } catch {
+      // Ignore invalid cursor
+    }
+  }
+
+  let query = supabaseAdmin
+    .from('prompt_result_shopping_cards')
+    .select('*')
+    .eq('brand_id', params.brandId)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(finalLimit + 1);
+
+  if (params.role) {
+    query = query.eq('matched_brand_role', params.role);
+  }
+  if (params.platform) {
+    query = query.eq('platform', params.platform);
+  }
+  if (params.region) {
+    query = query.eq('region', params.region);
+  }
+
+  if (cursorData) {
+    query = query.or(
+      `created_at.lt.${cursorData.created_at},and(created_at.eq.${cursorData.created_at},id.lt.${cursorData.id})`,
+    );
+  }
+
+  const { data: rows, error } = await query;
+  if (error) throw new Error(error.message);
+
+  const cards = (rows ?? []) as ShoppingCardRow[];
+  const hasNextPage = cards.length > finalLimit;
+  const slicedCards = hasNextPage ? cards.slice(0, finalLimit) : cards;
+
+  let nextCursor: string | null = null;
+  if (hasNextPage && slicedCards.length > 0) {
+    const lastItem = slicedCards[slicedCards.length - 1];
+    nextCursor = Buffer.from(
+      JSON.stringify({ created_at: lastItem.created_at, id: lastItem.id }),
+    ).toString('base64');
+  }
+
+  return {
+    cards: slicedCards,
+    next_cursor: nextCursor,
+  };
+}
+
+export interface ProductVisibilityOutput {
+  product_title: string;
+  total_appearances: number;
+  by_platform: Array<{ platform: string; count: number }>;
+  by_region: Array<{ region: string; count: number }>;
+  by_date: Array<{ date: string; count: number }>;
+  latest_appearance: string | null;
+  average_rating: number | null;
+  total_reviews: number | null;
+  merchant_domains: Array<{ domain: string; count: number }>;
+}
+
+export async function getProductVisibility(
+  auth: McpAuthContext,
+  params: { brandId: string; productTitle: string },
+): Promise<ProductVisibilityOutput | null> {
+  if (!auth.organizationId) return null;
+
+  // Brand ownership check
+  const { data: brand } = await supabaseAdmin
+    .from('brands')
+    .select('id')
+    .eq('id', params.brandId)
+    .eq('organization_id', auth.organizationId)
+    .maybeSingle();
+  if (!brand) return null;
+
+  const { data: cards, error } = await supabaseAdmin
+    .from('prompt_result_shopping_cards')
+    .select(
+      'platform, region, created_at, price_amount, price_currency, rating, review_count, merchant_domain',
+    )
+    .eq('brand_id', params.brandId)
+    .eq('product_title', params.productTitle)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(error.message);
+  if (!cards || cards.length === 0) return null;
+
+  const total_appearances = cards.length;
+
+  const platformMap = new Map<string, number>();
+  const regionMap = new Map<string, number>();
+  const dateMap = new Map<string, number>();
+  const domainMap = new Map<string, number>();
+
+  let ratingSum = 0;
+  let ratingCount = 0;
+  let totalReviews: number | null = null;
+
+  for (const card of cards) {
+    const platform = card.platform || 'unknown';
+    platformMap.set(platform, (platformMap.get(platform) ?? 0) + 1);
+
+    const region = card.region || 'unknown';
+    regionMap.set(region, (regionMap.get(region) ?? 0) + 1);
+
+    const date = card.created_at ? card.created_at.slice(0, 10) : 'unknown';
+    dateMap.set(date, (dateMap.get(date) ?? 0) + 1);
+
+    if (card.merchant_domain) {
+      domainMap.set(card.merchant_domain, (domainMap.get(card.merchant_domain) ?? 0) + 1);
+    }
+
+    if (card.rating !== null && card.rating !== undefined) {
+      ratingSum += Number(card.rating);
+      ratingCount += 1;
+    }
+
+    if (card.review_count !== null && card.review_count !== undefined) {
+      if (totalReviews === null) totalReviews = 0;
+      totalReviews += card.review_count;
+    }
+  }
+
+  const by_platform = Array.from(platformMap.entries())
+    .map(([platform, count]) => ({ platform, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const by_region = Array.from(regionMap.entries())
+    .map(([region, count]) => ({ region, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const by_date = Array.from(dateMap.entries())
+    .map(([date, count]) => ({ date, count }))
+    .sort((a, b) => b.date.localeCompare(a.date)); // Sort chronologically descending
+
+  const merchant_domains = Array.from(domainMap.entries())
+    .map(([domain, count]) => ({ domain, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const average_rating = ratingCount > 0 ? Math.round((ratingSum / ratingCount) * 10) / 10 : null;
+  const latest_appearance = cards[0]?.created_at || null;
+
+  return {
+    product_title: params.productTitle,
+    total_appearances,
+    by_platform,
+    by_region,
+    by_date,
+    latest_appearance,
+    average_rating,
+    total_reviews: totalReviews,
+    merchant_domains,
+  };
+}

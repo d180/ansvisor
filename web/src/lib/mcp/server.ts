@@ -17,6 +17,8 @@ import {
   updateOpportunityStatusFor,
   getAiTrafficFor,
   getPromptVolumesFor,
+  listShoppingCards,
+  getProductVisibility,
 } from './data';
 
 /**
@@ -497,6 +499,87 @@ export function createMcpServer(auth: McpAuthContext): McpServer {
       }
       return {
         content: [{ type: 'text', text: JSON.stringify(volumes, null, 2) }],
+      };
+    },
+  );
+
+  server.registerTool(
+    'list_shopping_cards',
+    {
+      description:
+        'List normalized shopping cards for a brand, showing which products are surfaced by AI engines in commercial-intent contexts. Supports filtering by matched brand role ("own" | "competitor" | "other"), platform, and region. Pagination is cursor-based (default limit 50, max 200). Use this to see which product brands, URLs, and prices are visible in search results.',
+      inputSchema: {
+        brand_id: relaxedUuid.describe('Brand UUID, from list_brands.'),
+        role: z
+          .enum(['own', 'competitor', 'other'])
+          .optional()
+          .describe(
+            'Filter by role relationship of the matched brand: "own" (this brand), "competitor" (tracked competitors), or "other" (untracked brands).',
+          ),
+        platform: z
+          .string()
+          .optional()
+          .describe(
+            'Optional scraper/platform filter (e.g. "chatgpt-shopping", "perplexity-web").',
+          ),
+        region: z.string().optional().describe('Optional region code filter (e.g. "US", "TR").'),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe('Optional limit (default 50, max 200).'),
+        cursor: z
+          .string()
+          .optional()
+          .describe('Base64 encoded pagination cursor from next_cursor.'),
+      },
+    },
+    async (args) => {
+      const result = await listShoppingCards(auth, {
+        brandId: args.brand_id,
+        role: args.role,
+        platform: args.platform,
+        region: args.region,
+        limit: args.limit,
+        cursor: args.cursor,
+      });
+      if (result === null) {
+        return {
+          content: [{ type: 'text', text: 'Brand not found' }],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
+    },
+  );
+
+  server.registerTool(
+    'get_product_visibility',
+    {
+      description:
+        "Get aggregate visibility metrics for a specific product title across platforms, regions, and dates. Returns total appearances, platform breakdown, region breakdown, chronological trend of dates, average rating, total reviews, and associated merchant domains. Use this to audit a single product's performance and organic footprint in AI-driven shopping results.",
+      inputSchema: {
+        brand_id: relaxedUuid.describe('Brand UUID, from list_brands.'),
+        product_title: z.string().describe('The product title/name to query.'),
+      },
+    },
+    async (args) => {
+      const result = await getProductVisibility(auth, {
+        brandId: args.brand_id,
+        productTitle: args.product_title,
+      });
+      if (result === null) {
+        return {
+          content: [{ type: 'text', text: 'Product or Brand not found' }],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
       };
     },
   );
