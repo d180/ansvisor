@@ -664,6 +664,7 @@ export type Database = {
           prompt_id: string;
           region: string | null;
           response: string;
+          search_queries: Json;
           sentiment: string;
           shopping_cards: Json;
           visibility_score: number;
@@ -682,6 +683,7 @@ export type Database = {
           prompt_id: string;
           region?: string | null;
           response?: string;
+          search_queries?: Json;
           sentiment?: string;
           shopping_cards?: Json;
           visibility_score?: number;
@@ -700,6 +702,7 @@ export type Database = {
           prompt_id?: string;
           region?: string | null;
           response?: string;
+          search_queries?: Json;
           sentiment?: string;
           shopping_cards?: Json;
           visibility_score?: number;

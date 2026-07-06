@@ -12,6 +12,7 @@ const PlatformVolumeChart = dynamic(() => import('./_charts').then((m) => m.Plat
   loading: () => <Skeleton className="h-64 w-full" />,
 });
 import { SuggestionsCard } from './_suggestions-card';
+import { QueryFanoutTab } from './_fanout-tab';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -218,7 +219,7 @@ const PROMPT_EXPORT_HINT = 'No prompts yet - add prompts first.';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const VALID_TABS = ['all', 'insights'] as const;
+const VALID_TABS = ['all', 'fanout', 'insights'] as const;
 type TabId = (typeof VALID_TABS)[number];
 
 function formatRelative(iso?: string): string {
@@ -560,6 +561,7 @@ export default function PromptsPage() {
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <TabsList>
             <TabsTrigger value="all">All Prompts</TabsTrigger>
+            <TabsTrigger value="fanout">Query Fan-out</TabsTrigger>
             <TabsTrigger value="insights">Insights</TabsTrigger>
           </TabsList>
           <div className="flex items-center gap-2">
@@ -634,6 +636,11 @@ export default function PromptsPage() {
             volumeByPromptId={volumeByPromptId}
             visibility={visibility}
           />
+        </TabsContent>
+
+        {/* ─── Query Fan-out tab ───────────────────────────────────────── */}
+        <TabsContent value="fanout" className="mt-4">
+          {activeBrandId && <QueryFanoutTab brandId={activeBrandId} />}
         </TabsContent>
 
         {/* ─── Insights tab ────────────────────────────────────────────── */}
