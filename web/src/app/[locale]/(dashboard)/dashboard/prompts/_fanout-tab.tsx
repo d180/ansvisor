@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Link } from '@/i18n/navigation';
 import {
@@ -311,12 +311,8 @@ function ByPromptView({
         {groups.map(({ prompt, subQueries }) => {
           const isOpen = expanded.has(prompt.id);
           return (
-            <>
-              <TableRow
-                key={prompt.id}
-                className="cursor-pointer select-none"
-                onClick={() => toggle(prompt.id)}
-              >
+            <Fragment key={prompt.id}>
+              <TableRow className="cursor-pointer select-none" onClick={() => toggle(prompt.id)}>
                 <TableCell className="pr-0">
                   <ChevronRight
                     className={cn(
@@ -376,7 +372,7 @@ function ByPromptView({
                   </TableCell>
                 </TableRow>
               )}
-            </>
+            </Fragment>
           );
         })}
       </TableBody>
