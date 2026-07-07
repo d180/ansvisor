@@ -1554,11 +1554,12 @@ export default function OnboardingPage() {
                       </span>
                     )}
                   </PlanFeatureItem>
-                  {plan.limits.maxTeamMembers > 1 && (
-                    <PlanFeatureItem>
-                      <strong>{plan.limits.maxTeamMembers}</strong> team members
-                    </PlanFeatureItem>
-                  )}
+                  <PlanFeatureItem>
+                    <strong>
+                      {plan.limits.maxTeamMembers === -1 ? 'Unlimited' : plan.limits.maxTeamMembers}
+                    </strong>{' '}
+                    team members
+                  </PlanFeatureItem>
                   <PlanFeatureItem>
                     {plan.limits.features.includes('daily_monitoring')
                       ? 'Daily monitoring'
