@@ -798,15 +798,18 @@ export default function OnboardingPage() {
 
   const handleFinish = async () => {
     if (!createdBrand) return;
+    const selected = suggestedCompetitors.filter((c) => c.selected);
+    if (selected.length === 0) {
+      toast.error('Add at least one competitor to continue.');
+      return;
+    }
+
     setSavingCompetitors(true);
     try {
       // Save selected competitors
-      const selected = suggestedCompetitors.filter((c) => c.selected);
-      if (selected.length > 0) {
-        await Promise.all(
-          selected.map((c) => addCompetitor(createdBrand.id, { name: c.name, domain: c.domain })),
-        );
-      }
+      await Promise.all(
+        selected.map((c) => addCompetitor(createdBrand.id, { name: c.name, domain: c.domain })),
+      );
 
       // Mark onboarding as complete
       const supabase = createClient();
@@ -1323,6 +1326,7 @@ export default function OnboardingPage() {
 
   if (step === 5) {
     const selectedCompetitorCount = suggestedCompetitors.filter((c) => c.selected).length;
+    const hasSelectedCompetitors = selectedCompetitorCount > 0;
 
     return (
       <div className="flex min-h-svh flex-col p-6 md:p-10">
@@ -1431,16 +1435,20 @@ export default function OnboardingPage() {
                 </div>
               </div>
 
-              <Button className="w-full" onClick={handleFinish} disabled={savingCompetitors}>
+              <Button
+                className="w-full"
+                onClick={handleFinish}
+                disabled={savingCompetitors || !hasSelectedCompetitors}
+              >
                 {savingCompetitors ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Finishing setup...
                   </>
-                ) : selectedCompetitorCount > 0 ? (
+                ) : hasSelectedCompetitors ? (
                   `Start tracking with ${selectedCompetitorCount} competitor${selectedCompetitorCount !== 1 ? 's' : ''}`
                 ) : (
-                  'Skip & start tracking'
+                  'Add a competitor to continue'
                 )}
               </Button>
             </div>
