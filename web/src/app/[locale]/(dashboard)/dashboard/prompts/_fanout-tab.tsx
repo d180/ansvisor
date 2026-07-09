@@ -43,6 +43,8 @@ type QueryFanoutTabProps = {
   onTracked?: () => void | Promise<void>;
 };
 
+const INTENT_INITIAL_LOAD_TIMEOUT_MS = 1500;
+
 export function QueryFanoutTab({ brandId, onTracked }: QueryFanoutTabProps) {
   const [data, setData] = useState<QueryFanoutData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,13 +60,29 @@ export function QueryFanoutTab({ brandId, onTracked }: QueryFanoutTabProps) {
     try {
       const result = await getQueryFanout(brandId, { days: 30 });
       setData(result);
-      // Fill in intents on-demand (cached server-side) — non-blocking, so the
-      // table paints immediately and the intent badges appear as they resolve.
       const queries = result.subQueries.map((s) => s.query);
       if (queries.length > 0) {
-        classifyFanoutIntents(queries)
-          .then((map) => setIntents((prev) => ({ ...prev, ...map })))
-          .catch(() => {});
+        const intentPromise = classifyFanoutIntents(queries);
+        const intentResult = await Promise.race<
+          | { status: 'resolved'; map: Record<string, string> }
+          | { status: 'failed' }
+          | { status: 'timeout' }
+        >([
+          intentPromise
+            .then((map) => ({ status: 'resolved' as const, map }))
+            .catch(() => ({ status: 'failed' as const })),
+          new Promise<{ status: 'timeout' }>((resolve) =>
+            setTimeout(() => resolve({ status: 'timeout' }), INTENT_INITIAL_LOAD_TIMEOUT_MS),
+          ),
+        ]);
+
+        if (intentResult.status === 'resolved') {
+          setIntents((prev) => ({ ...prev, ...intentResult.map }));
+        } else if (intentResult.status === 'timeout') {
+          // Keep first paint bounded on cold/slow classifications; fill badges
+          // when the original batch resolves instead of issuing a second call.
+          intentPromise.then((map) => setIntents((prev) => ({ ...prev, ...map }))).catch(() => {});
+        }
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load query fan-out');
