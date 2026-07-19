@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { PromptSet, Prompt, AIPlatform, PromptVolume } from '@/types';
-import { enforceLimit, getOrgPlan } from '@/lib/guards/plan-guard';
+import { enforceLimit, getOrgPlan, PlanLimitError } from '@/lib/guards/plan-guard';
 import { ALL_MODELS, ALL_SCRAPERS } from '@/config/prompt-options';
 import type { Plan } from '@/config/plans';
 import { getPromptVolumes, type VolumeQuota } from '@/lib/actions/volumes';
@@ -384,6 +384,69 @@ export async function addPromptToSet(input: AddPromptInput): Promise<Prompt> {
 
   revalidatePath('/dashboard/brands');
   return mapPromptRow(data as Record<string, unknown>);
+}
+
+export type AddPromptToBrandResult = { prompt: Prompt } | { error: string };
+
+/**
+ * Add a single prompt to a brand from the main Prompts page (#460). Same
+ * write path as the brand page's Add Prompt card (addPromptToSet with the
+ * caller's topic/platform/model choices); the brand's earliest prompt set is
+ * the target, created on the fly when the brand has none yet.
+ *
+ * User-facing failures (plan limit, empty selection) come back as a VALUE:
+ * production masks every error thrown from a server action, so a thrown
+ * PlanLimitError would reach users as the meaningless digest message (#427).
+ */
+export async function addPromptToBrand(
+  brandId: string,
+  input: { text: string; category?: string; platforms: string[]; models?: string[] },
+): Promise<AddPromptToBrandResult> {
+  const supabase = await createClient();
+  const trimmed = input.text.trim();
+  if (!trimmed) return { error: 'Prompt text is required.' };
+  if (input.platforms.length === 0 && (input.models ?? []).length === 0) {
+    return { error: 'Select at least one platform or model.' };
+  }
+
+  const { data: ps, error: psErr } = await supabase
+    .from('prompt_sets')
+    .select('id')
+    .eq('brand_id', brandId)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (psErr) return { error: psErr.message };
+
+  let promptSetId = ps?.id as string | undefined;
+  if (!promptSetId) {
+    const { data: createdSet, error: setErr } = await supabase
+      .from('prompt_sets')
+      .insert({ brand_id: brandId, name: 'Prompts' })
+      .select('id')
+      .single();
+    if (setErr || !createdSet) {
+      return { error: setErr?.message ?? 'Failed to create a prompt set for this brand.' };
+    }
+    promptSetId = createdSet.id as string;
+  }
+
+  let created: Prompt;
+  try {
+    created = await addPromptToSet({
+      promptSetId,
+      text: trimmed,
+      category: input.category,
+      platforms: input.platforms,
+      models: input.models ?? [],
+    });
+  } catch (err) {
+    if (err instanceof PlanLimitError) return { error: err.message };
+    throw err;
+  }
+
+  revalidatePath('/dashboard/prompts');
+  return { prompt: created };
 }
 
 export async function deletePrompt(id: string): Promise<void> {
