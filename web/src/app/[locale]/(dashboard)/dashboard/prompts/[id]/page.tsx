@@ -7,14 +7,40 @@ import {
   getPromptDetail,
   type PromptDetailData,
   type PromptResultWithText,
+  type PromptTopSource,
+  type PromptTopSourceUrl,
 } from '@/lib/actions/tracking';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, ChevronDown, Clock, Eye, MessageSquareText, Quote } from 'lucide-react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  ArrowLeft,
+  ChevronDown,
+  Clock,
+  ExternalLink,
+  Eye,
+  MessageSquareText,
+  Quote,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AIProviderAvatar, resolveAIProvider } from '@/components/ai-provider-avatar';
+import {
+  CategoryBadge,
+  DomainFavicon,
+  PlatformsCell,
+  UsageBar,
+} from '@/components/citations/source-cells';
+import { TablePager, usePagination } from '@/components/table-pager';
 import { groupByPlatform, type PlatformGroup } from './grouping';
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -141,6 +167,177 @@ function KpiCard({
           <p className="text-2xl font-bold tabular-nums">{value}</p>
           <p className="text-xs text-muted-foreground">{title}</p>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TopSourceDomainsTable({ rows }: { rows: PromptTopSource[] }) {
+  const pager = usePagination(rows.length, rows.length);
+  const pageRows = rows.slice(pager.start, pager.end);
+
+  return (
+    <div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[56px] text-xs">Rank</TableHead>
+            <TableHead className="text-xs">Domain</TableHead>
+            <TableHead className="text-xs">Platforms</TableHead>
+            <TableHead className="text-xs">Usage</TableHead>
+            <TableHead className="text-right text-xs">Citations</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {pageRows.map((row, i) => (
+            <TableRow key={row.domain}>
+              {/* Global rank — offset by page so rank is continuous across pages */}
+              <TableCell className="text-xs text-muted-foreground tabular-nums">
+                {pager.start + i + 1}
+              </TableCell>
+              <TableCell>
+                <div className="flex min-w-0 items-center gap-2">
+                  <DomainFavicon domain={row.domain} />
+                  <div className="flex min-w-0 flex-col">
+                    <span className="truncate text-sm font-medium">{row.domain}</span>
+                    <div className="flex items-center gap-1.5 pt-0.5">
+                      <CategoryBadge category={row.category} />
+                      <a
+                        href={`https://${row.domain}`}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="inline-flex items-center text-muted-foreground hover:text-foreground"
+                        aria-label={`Open ${row.domain} in a new tab`}
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </TableCell>
+              <TableCell>
+                <PlatformsCell models={row.models} />
+              </TableCell>
+              <TableCell>
+                <UsageBar pct={row.usagePct} />
+              </TableCell>
+              <TableCell className="text-right text-xs tabular-nums">
+                {row.totalCitations}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <TablePager
+        page={pager.page}
+        totalPages={pager.totalPages}
+        total={rows.length}
+        start={pager.start}
+        end={pager.end}
+        onPage={pager.setPage}
+      />
+    </div>
+  );
+}
+
+function TopSourceUrlsTable({ rows }: { rows: PromptTopSourceUrl[] }) {
+  const pager = usePagination(rows.length, rows.length);
+  const pageRows = rows.slice(pager.start, pager.end);
+
+  return (
+    <div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[56px] text-xs">Rank</TableHead>
+            <TableHead className="text-xs">URL</TableHead>
+            <TableHead className="text-xs">Platforms</TableHead>
+            <TableHead className="text-xs">Usage</TableHead>
+            <TableHead className="text-right text-xs">Citations</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {pageRows.map((row, i) => (
+            <TableRow key={row.url}>
+              {/* Global rank — offset by page so rank is continuous across pages */}
+              <TableCell className="text-xs text-muted-foreground tabular-nums">
+                {pager.start + i + 1}
+              </TableCell>
+              <TableCell>
+                <div className="flex min-w-0 items-start gap-2">
+                  <DomainFavicon domain={row.domain} />
+                  <div className="flex min-w-0 max-w-[480px] flex-col">
+                    <a
+                      href={row.url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="truncate text-sm font-medium text-foreground hover:underline"
+                      title={row.title || row.url}
+                    >
+                      {row.title || row.url}
+                    </a>
+                    <div className="flex items-center gap-1.5 pt-0.5">
+                      <span className="truncate text-[11px] text-muted-foreground">
+                        {row.domain}
+                      </span>
+                      <CategoryBadge category={row.category} />
+                    </div>
+                  </div>
+                </div>
+              </TableCell>
+              <TableCell>
+                <PlatformsCell models={row.models} />
+              </TableCell>
+              <TableCell>
+                <UsageBar pct={row.usagePct} />
+              </TableCell>
+              <TableCell className="text-right text-xs tabular-nums">
+                {row.totalCitations}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <TablePager
+        page={pager.page}
+        totalPages={pager.totalPages}
+        total={rows.length}
+        start={pager.start}
+        end={pager.end}
+        onPage={pager.setPage}
+      />
+    </div>
+  );
+}
+
+function TopSourcesCard({
+  sources,
+  sourceUrls,
+}: {
+  sources: PromptTopSource[];
+  sourceUrls: PromptTopSourceUrl[];
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-medium">Top Sources</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Sources AI platforms cite when answering this prompt.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <Tabs defaultValue="domains">
+          <TabsList>
+            <TabsTrigger value="domains">Domains ({sources.length})</TabsTrigger>
+            <TabsTrigger value="urls">URLs ({sourceUrls.length})</TabsTrigger>
+          </TabsList>
+          <TabsContent value="domains" keepMounted className="mt-4">
+            <TopSourceDomainsTable rows={sources} />
+          </TabsContent>
+          <TabsContent value="urls" keepMounted className="mt-4">
+            <TopSourceUrlsTable rows={sourceUrls} />
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );
@@ -439,6 +636,10 @@ export default function PromptDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {data.topSources.length > 0 && (
+        <TopSourcesCard sources={data.topSources} sourceUrls={data.topSourceUrls} />
+      )}
     </div>
   );
 }
