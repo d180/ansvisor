@@ -9,6 +9,8 @@ import {
   getShareOfVoiceData,
   getCompetitorComparison,
   getVisibilityTrend,
+  getVisibilityRateKpi,
+  getTrackedPromptsKpi,
   type InsightsSummary,
   type CompetitorComparisonEntry,
   type SoVByPlatform,
@@ -113,6 +115,16 @@ export interface ReportAuditScore {
   auditedAt: string;
 }
 
+/** Prompt-level Visibility Rate KPI (#492) — mirrors the Insights dashboard's headline metric. */
+export interface ReportVisibilityRate {
+  /** Distinct prompts the brand appeared in (the rate's numerator). */
+  visiblePrompts: number;
+  /** Distinct tracked prompts that produced results in the window (shared denominator). */
+  promptCount: number;
+  /** visiblePrompts / promptCount as a percentage, one decimal place. */
+  ratePct: number;
+}
+
 /**
  * All metric fields are optional: a template only gathers its own sections
  * (see lib/reports/templates.ts), and the detail page + PDF render purely by
@@ -124,6 +136,8 @@ export interface ReportPayload {
   /** AI-generated executive summary (plain prose). */
   summaryText: string;
   insights?: InsightsSummary;
+  /** Prompt-level Visibility Rate — leads the KPI row (#492); absent on reports generated before this shipped. */
+  visibilityRate?: ReportVisibilityRate;
   /** Daily visibility trend over the report period. */
   visibilityTrend?: VisibilityTrendPoint[];
   /** Best/worst performing prompts in the period. */
@@ -496,6 +510,27 @@ async function getAuditSnapshot(brandId: string, dateTo: string): Promise<Report
   };
 }
 
+/**
+ * Visibility Rate KPI for the report snapshot (#492) — same shape and
+ * denominator as the Insights dashboard's headline metric, so a report's KPI
+ * row matches what the Insights page shows for the identical date range.
+ */
+async function getReportVisibilityRate(
+  brandId: string,
+  range: { dateFrom: string; dateTo: string },
+): Promise<ReportVisibilityRate> {
+  const [rate, tracked] = await Promise.all([
+    getVisibilityRateKpi(brandId, range),
+    getTrackedPromptsKpi(brandId, range),
+  ]);
+  const promptCount = tracked.activeInPeriod;
+  return {
+    visiblePrompts: rate.visiblePrompts,
+    promptCount,
+    ratePct: promptCount > 0 ? Math.round((rate.visiblePrompts / promptCount) * 1000) / 10 : 0,
+  };
+}
+
 /** How many evidence rows a report keeps per evidence section (#429). */
 const REPORT_EVIDENCE_COUNT = 10;
 /** How many sourcing prompts each cited URL lists. */
@@ -735,6 +770,7 @@ export async function createReport(
   //    only the picked sections (null = section not gathered).
   const [
     insights,
+    visibilityRate,
     sov,
     comparison,
     citations,
@@ -749,6 +785,7 @@ export async function createReport(
     auditScore,
   ] = await Promise.all([
     has('kpis') ? getInsightsSummary(brandId, range) : null,
+    has('kpis') ? getReportVisibilityRate(brandId, range) : null,
     has('shareOfVoice') ? getShareOfVoiceData(brandId, range) : null,
     has('competitors') ? getCompetitorComparison(brandId, range) : null,
     has('citations')
@@ -768,6 +805,7 @@ export async function createReport(
   const snapshot: Omit<ReportPayload, 'summaryText'> = {
     brandName,
     ...(insights ? { insights } : {}),
+    ...(visibilityRate ? { visibilityRate } : {}),
     ...(trend ? { visibilityTrend: trend } : {}),
     ...(promptPerformance ? { promptPerformance } : {}),
     ...(mentionEvidence && mentionEvidence.length > 0 ? { mentionEvidence } : {}),

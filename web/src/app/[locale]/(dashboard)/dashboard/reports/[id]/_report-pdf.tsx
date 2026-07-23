@@ -68,6 +68,7 @@ const styles = StyleSheet.create({
   kpiLabel: { fontSize: 7, color: MUTED, textTransform: 'uppercase', marginBottom: 3 },
   kpiValueRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
   kpiValue: { fontSize: 14, fontWeight: 700 },
+  kpiSub: { fontSize: 7, color: MUTED, marginTop: 2 },
   delta: { fontSize: 8, marginBottom: 1 },
   axisLabelRow: {
     flexDirection: 'row',
@@ -233,6 +234,57 @@ export function ReportPdfDocument({ report }: { report: Report }) {
   const maxSov = Math.max(...(payload.shareOfVoice?.byPlatform.map((p) => p.sov) ?? []), 1);
   const trend = payload.visibilityTrend ?? [];
   const hasCompetitorTrend = trend.some((d) => d.competitors !== null);
+  // Reports generated before #492 have no `visibilityRate` — fall back to
+  // the old score-only KPI box so those snapshots keep rendering unchanged.
+  const kpiEntries: { label: string; value: string; change: number | null; sub?: string }[] =
+    payload.insights
+      ? [
+          ...(payload.visibilityRate
+            ? [
+                {
+                  label: 'Visibility Rate',
+                  value: `${payload.visibilityRate.ratePct}%`,
+                  change: null,
+                  sub: `${payload.visibilityRate.visiblePrompts}/${payload.visibilityRate.promptCount} prompts`,
+                },
+                {
+                  label: 'Avg. Score',
+                  value: `${payload.insights.avgVisibilityScore}%`,
+                  change: payload.insights.visibilityChange,
+                },
+              ]
+            : [
+                {
+                  label: 'Visibility',
+                  value: `${payload.insights.avgVisibilityScore}%`,
+                  change: payload.insights.visibilityChange,
+                },
+              ]),
+          {
+            label: 'Mentions',
+            value: String(payload.insights.totalMentions),
+            change: payload.insights.mentionsChange,
+          },
+          {
+            label: 'Brand Citations',
+            value: String(payload.insights.totalCitations),
+            change: payload.insights.citationsChange,
+          },
+          {
+            label: 'Positive Sentiment',
+            value: `${payload.insights.positiveSentimentPct}%`,
+            change: payload.insights.sentimentChange,
+          },
+        ]
+      : [];
+  // Reports generated before #492 stored competitor entries without these
+  // fields even though the type now declares them required — check at
+  // runtime rather than trusting the type for immutable, pre-existing data.
+  const hasCompetitorVisibilityRate = Boolean(
+    payload.competitors?.length &&
+    typeof payload.competitors[0].visibilityRate === 'number' &&
+    typeof payload.competitors[0].promptCount === 'number',
+  );
 
   return (
     <Document title={report.title} author="Ansvisor" creator="Ansvisor">
@@ -254,36 +306,14 @@ export function ReportPdfDocument({ report }: { report: Report }) {
         {/* KPI row */}
         {payload.insights && (
           <View style={[styles.section, styles.kpiRow]} wrap={false}>
-            {(
-              [
-                [
-                  'Visibility',
-                  `${payload.insights.avgVisibilityScore}%`,
-                  payload.insights.visibilityChange,
-                ],
-                [
-                  'Mentions',
-                  String(payload.insights.totalMentions),
-                  payload.insights.mentionsChange,
-                ],
-                [
-                  'Brand Citations',
-                  String(payload.insights.totalCitations),
-                  payload.insights.citationsChange,
-                ],
-                [
-                  'Positive Sentiment',
-                  `${payload.insights.positiveSentimentPct}%`,
-                  payload.insights.sentimentChange,
-                ],
-              ] as const
-            ).map(([label, value, change]) => (
-              <View key={label} style={styles.kpiBox}>
-                <Text style={styles.kpiLabel}>{label}</Text>
+            {kpiEntries.map((entry) => (
+              <View key={entry.label} style={styles.kpiBox}>
+                <Text style={styles.kpiLabel}>{entry.label}</Text>
                 <View style={styles.kpiValueRow}>
-                  <Text style={styles.kpiValue}>{value}</Text>
-                  <DeltaText value={change} />
+                  <Text style={styles.kpiValue}>{entry.value}</Text>
+                  <DeltaText value={entry.change} />
                 </View>
+                {entry.sub && <Text style={styles.kpiSub}>{entry.sub}</Text>}
               </View>
             ))}
           </View>
@@ -342,7 +372,7 @@ export function ReportPdfDocument({ report }: { report: Report }) {
             <View style={styles.tableHeader}>
               <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Brand</Text>
               <Text style={[styles.tableHeaderCell, { width: 60, textAlign: 'right' }]}>
-                Visibility
+                {hasCompetitorVisibilityRate ? 'Visibility Rate' : 'Visibility'}
               </Text>
               <Text style={[styles.tableHeaderCell, { width: 50, textAlign: 'right' }]}>
                 Change
@@ -366,9 +396,16 @@ export function ReportPdfDocument({ report }: { report: Report }) {
                   {c.name}
                   {c.isOwnBrand ? ' (you)' : ''}
                 </Text>
-                <Text style={[styles.cell, { width: 60, textAlign: 'right' }]}>
-                  {c.avgVisibilityScore}%
-                </Text>
+                <View style={{ width: 60, alignItems: 'flex-end' }}>
+                  <Text style={styles.cell}>
+                    {hasCompetitorVisibilityRate ? c.visibilityRate : c.avgVisibilityScore}%
+                  </Text>
+                  {hasCompetitorVisibilityRate && (
+                    <Text style={styles.kpiSub}>
+                      {c.visiblePrompts}/{c.promptCount} prompts
+                    </Text>
+                  )}
+                </View>
                 <View style={{ width: 50, alignItems: 'flex-end' }}>
                   <DeltaText value={c.change} />
                 </View>

@@ -502,6 +502,9 @@
     "executiveSummary": "Executive Summary",
     "kpi": {
       "visibility": "Visibility",
+      "visibilityRate": "Visibility Rate",
+      "visibilityRateSub": "{visible}/{total} prompts",
+      "avgScore": "Avg. Score",
       "mentions": "Mentions",
       "citations": "Brand Citations",
       "sentiment": "Positive Sentiment"

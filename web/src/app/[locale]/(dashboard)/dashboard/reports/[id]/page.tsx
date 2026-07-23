@@ -56,10 +56,12 @@ function KpiCard({
   label,
   value,
   change,
+  sub,
 }: {
   label: string;
   value: string;
   change: number | null;
+  sub?: string;
 }) {
   return (
     <Card>
@@ -71,6 +73,7 @@ function KpiCard({
           <span className="text-2xl font-bold">{value}</span>
           <Delta value={change} />
         </div>
+        {sub && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}
       </CardContent>
     </Card>
   );
@@ -125,6 +128,14 @@ export default function ReportDetailPage() {
 
   const { payload } = report;
   const maxSov = Math.max(...(payload.shareOfVoice?.byPlatform.map((p) => p.sov) ?? []), 1);
+  // Reports generated before #492 stored competitor entries without these
+  // fields even though the type now declares them required — check at
+  // runtime rather than trusting the type for immutable, pre-existing data.
+  const hasCompetitorVisibilityRate = Boolean(
+    payload.competitors?.length &&
+    typeof payload.competitors[0].visibilityRate === 'number' &&
+    typeof payload.competitors[0].promptCount === 'number',
+  );
 
   // Render a true vector PDF from the saved payload with @react-pdf/renderer
   // (selectable text, exact layout — no screenshot artifacts). The renderer
@@ -207,12 +218,38 @@ export default function ReportDetailPage() {
             gather their own sections, and older (immutable) reports may
             predate a field entirely. */}
         {payload.insights && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <KpiCard
-              label={t('kpi.visibility')}
-              value={`${payload.insights.avgVisibilityScore}%`}
-              change={payload.insights.visibilityChange}
-            />
+          <div
+            className={cn(
+              'grid gap-4',
+              payload.visibilityRate
+                ? 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-5'
+                : 'sm:grid-cols-2 lg:grid-cols-4',
+            )}
+          >
+            {payload.visibilityRate ? (
+              <>
+                <KpiCard
+                  label={t('kpi.visibilityRate')}
+                  value={`${payload.visibilityRate.ratePct}%`}
+                  change={null}
+                  sub={t('kpi.visibilityRateSub', {
+                    visible: payload.visibilityRate.visiblePrompts,
+                    total: payload.visibilityRate.promptCount,
+                  })}
+                />
+                <KpiCard
+                  label={t('kpi.avgScore')}
+                  value={`${payload.insights.avgVisibilityScore}%`}
+                  change={payload.insights.visibilityChange}
+                />
+              </>
+            ) : (
+              <KpiCard
+                label={t('kpi.visibility')}
+                value={`${payload.insights.avgVisibilityScore}%`}
+                change={payload.insights.visibilityChange}
+              />
+            )}
             <KpiCard
               label={t('kpi.mentions')}
               value={String(payload.insights.totalMentions)}
@@ -228,7 +265,14 @@ export default function ReportDetailPage() {
               value={`${payload.insights.positiveSentimentPct}%`}
               change={payload.insights.sentimentChange}
             />
-            <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-4">
+            <p
+              className={cn(
+                'text-xs text-muted-foreground',
+                payload.visibilityRate
+                  ? 'col-span-2 sm:col-span-3 xl:col-span-5'
+                  : 'sm:col-span-2 lg:col-span-4',
+              )}
+            >
               {t('kpiCitationsNote')}
             </p>
           </div>
@@ -287,7 +331,11 @@ export default function ReportDetailPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>{t('columns.brand')}</TableHead>
-                      <TableHead className="text-right">{t('kpi.visibility')}</TableHead>
+                      <TableHead className="text-right">
+                        {hasCompetitorVisibilityRate
+                          ? t('kpi.visibilityRate')
+                          : t('kpi.visibility')}
+                      </TableHead>
                       <TableHead className="text-right">{t('columns.change')}</TableHead>
                       <TableHead className="text-right">{t('kpi.mentions')}</TableHead>
                       <TableHead className="text-right">{t('kpi.citations')}</TableHead>
@@ -302,7 +350,21 @@ export default function ReportDetailPage() {
                             <span className="ml-2 text-xs text-muted-foreground">{t('you')}</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-right">{c.avgVisibilityScore}%</TableCell>
+                        <TableCell className="text-right">
+                          {hasCompetitorVisibilityRate ? (
+                            <>
+                              <div>{c.visibilityRate}%</div>
+                              <div className="text-xs font-normal text-muted-foreground">
+                                {t('kpi.visibilityRateSub', {
+                                  visible: c.visiblePrompts,
+                                  total: c.promptCount,
+                                })}
+                              </div>
+                            </>
+                          ) : (
+                            `${c.avgVisibilityScore}%`
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">
                           <Delta value={c.change} />
                         </TableCell>
