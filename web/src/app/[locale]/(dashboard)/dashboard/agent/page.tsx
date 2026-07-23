@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import type { AgentChartSpec } from '@/components/agent/agent-chart';
@@ -134,6 +135,7 @@ function AgentChat(props: {
     setInput,
     messagesEndRef,
   } = props;
+  const t = useTranslations('agent');
 
   // Ref mirrors activeId for prepareSendMessagesRequest. Reading the
   // state directly from the transport closure gives us a stale snapshot —
@@ -247,7 +249,7 @@ function AgentChat(props: {
   }
 
   async function deleteConversation(id: string) {
-    if (!confirm('Delete this conversation?')) return;
+    if (!confirm(t('deleteConfirm'))) return;
     const res = await fetch(`/api/agent/conversations/${id}`, { method: 'DELETE' });
     if (!res.ok) return;
     setConversations((prev) => prev.filter((c) => c.id !== id));
@@ -291,12 +293,12 @@ function AgentChat(props: {
         <div className="p-3 border-b">
           <Button onClick={newChat} variant="outline" className="w-full justify-start gap-2">
             <Plus className="h-4 w-4" />
-            New chat
+            {t('newChat')}
           </Button>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {conversations.length === 0 && (
-            <p className="text-xs text-muted-foreground text-center py-8">No conversations yet.</p>
+            <p className="text-xs text-muted-foreground text-center py-8">{t('noConversations')}</p>
           )}
           {conversations.map((c) => (
             // Outer wrapper is a div with role="button" rather than a real
@@ -328,7 +330,7 @@ function AgentChat(props: {
                   void deleteConversation(c.id);
                 }}
                 className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
-                aria-label="Delete conversation"
+                aria-label={t('deleteConversation')}
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -341,7 +343,7 @@ function AgentChat(props: {
         <div className="flex-1 overflow-y-auto px-6 py-6">
           {hydrating ? (
             <div className="flex items-center justify-center h-full text-muted-foreground gap-2 text-sm">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading conversation…
+              <Loader2 className="h-4 w-4 animate-spin" /> {t('loadingConversation')}
             </div>
           ) : messages.length === 0 ? (
             <EmptyState />
@@ -353,7 +355,7 @@ function AgentChat(props: {
               {(status === 'submitted' || status === 'streaming') && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Thinking…
+                  {t('thinking')}
                 </div>
               )}
               <div ref={messagesEndRef} />
@@ -372,14 +374,14 @@ function AgentChat(props: {
                   void onSubmit(e as unknown as React.FormEvent);
                 }
               }}
-              placeholder="Ask about visibility, competitors, citations…"
+              placeholder={t('inputPlaceholder')}
               rows={1}
               disabled={status !== 'ready'}
               className="flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent disabled:opacity-50"
             />
             {status === 'streaming' || status === 'submitted' ? (
               <Button type="button" variant="outline" onClick={() => stop()}>
-                Stop
+                {t('stop')}
               </Button>
             ) : (
               <Button type="submit" disabled={!input.trim()}>
@@ -394,6 +396,7 @@ function AgentChat(props: {
 }
 
 function MessageBubble({ message }: { message: UIMessage }) {
+  const t = useTranslations('agent');
   const isUser = message.role === 'user';
   const [copied, setCopied] = useState(false);
 
@@ -405,7 +408,7 @@ function MessageBubble({ message }: { message: UIMessage }) {
   async function handleCopy() {
     await navigator.clipboard.writeText(rawText).catch(() => {});
     setCopied(true);
-    toast.success('Copied');
+    toast.success(t('copied'));
     setTimeout(() => setCopied(false), 2000);
   }
 
@@ -460,7 +463,7 @@ function MessageBubble({ message }: { message: UIMessage }) {
           <button
             type="button"
             onClick={() => void handleCopy()}
-            aria-label={copied ? 'Copied' : 'Copy message'}
+            aria-label={copied ? t('copied') : t('copyMessage')}
             className="absolute bottom-2 right-2 p-1 rounded text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-foreground transition-opacity"
           >
             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
@@ -485,6 +488,7 @@ function MessageBubble({ message }: { message: UIMessage }) {
  * the same affordance most agent UIs (Claude, ChatGPT, Cursor) ship.
  */
 function ToolCallDisclosure({ part }: { part: UIMessage['parts'][number] }) {
+  const t = useTranslations('agent');
   const [open, setOpen] = useState(false);
   // Tool parts in AI SDK v6 carry these fields at the part level; we narrow
   // here rather than importing the union type because each tool gets a
@@ -530,7 +534,7 @@ function ToolCallDisclosure({ part }: { part: UIMessage['parts'][number] }) {
           {hasInput && (
             <div>
               <p className="text-muted-foreground font-medium mb-1 uppercase tracking-wider text-[10px]">
-                Input
+                {t('toolInput')}
               </p>
               <pre className="font-mono text-[11px] whitespace-pre-wrap break-words leading-relaxed text-foreground/90">
                 {safeStringify(toolPart.input)}
@@ -540,7 +544,7 @@ function ToolCallDisclosure({ part }: { part: UIMessage['parts'][number] }) {
           {hasOutput && (
             <div>
               <p className="text-muted-foreground font-medium mb-1 uppercase tracking-wider text-[10px]">
-                Output
+                {t('toolOutput')}
               </p>
               <pre className="font-mono text-[11px] whitespace-pre-wrap break-words leading-relaxed text-foreground/90 max-h-80 overflow-y-auto">
                 {safeStringify(toolPart.output)}
@@ -550,7 +554,7 @@ function ToolCallDisclosure({ part }: { part: UIMessage['parts'][number] }) {
           {toolPart.errorText && (
             <div>
               <p className="text-destructive font-medium mb-1 uppercase tracking-wider text-[10px]">
-                Error
+                {t('toolError')}
               </p>
               <pre className="font-mono text-[11px] whitespace-pre-wrap break-words leading-relaxed text-destructive">
                 {toolPart.errorText}
@@ -643,16 +647,17 @@ function AuditToolPart({ part }: { part: UIMessage['parts'][number] }) {
 }
 
 function EmptyState() {
+  const t = useTranslations('agent');
   return (
     <div className="flex h-full items-center justify-center">
       <div className="text-center max-w-md">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary mb-4">
           <Sparkles className="h-6 w-6" />
         </div>
-        <h2 className="text-lg font-semibold">Ask the agent</h2>
+        <h2 className="text-lg font-semibold">{t('emptyTitle')}</h2>
         <p className="text-sm text-muted-foreground mt-2">
-          Grounded in your tracked data. Try <em>&ldquo;how is my brand doing?&rdquo;</em> or{' '}
-          <em>&ldquo;who&apos;s gaining share of voice this month?&rdquo;</em>
+          {t('emptyBody')} <em>{t('emptyExample1')}</em> {t('emptyBodyOr')}{' '}
+          <em>{t('emptyExample2')}</em>
         </p>
       </div>
     </div>
@@ -701,23 +706,21 @@ function KeyGatedAgentChat(props: React.ComponentProps<typeof AgentChat>) {
 }
 
 function KeyMissingState() {
+  const t = useTranslations('agent');
   return (
     <div className="flex h-[calc(100vh-4rem)] md:h-screen items-center justify-center -m-6 p-6">
       <div className="text-center max-w-md">
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary mb-4">
           <KeyRound className="h-7 w-7" />
         </div>
-        <h2 className="text-lg font-semibold">Add your Anthropic API key</h2>
-        <p className="text-sm text-muted-foreground mt-2">
-          The agent uses your own Anthropic key to call Claude directly — usage is billed to your
-          Anthropic account, not to Ansvisor. Paste a key in Settings to unlock the chat.
-        </p>
+        <h2 className="text-lg font-semibold">{t('keyMissingTitle')}</h2>
+        <p className="text-sm text-muted-foreground mt-2">{t('keyMissingBody')}</p>
         <Link
           href="/dashboard/settings?tab=agent"
           className={cn(buttonVariants({ variant: 'default' }), 'mt-5 gap-2')}
         >
           <KeyRound className="h-4 w-4" />
-          Go to Settings
+          {t('goToSettings')}
         </Link>
       </div>
     </div>
@@ -725,17 +728,15 @@ function KeyMissingState() {
 }
 
 function PlanGate({ requiredPlan }: { requiredPlan: string }) {
+  const t = useTranslations('agent');
   return (
     <div className="flex h-[calc(100vh-4rem)] md:h-screen items-center justify-center -m-6 p-6">
       <div className="text-center max-w-md">
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30 mb-4">
           <Crown className="h-7 w-7 text-amber-600 dark:text-amber-400" />
         </div>
-        <h2 className="text-lg font-semibold">Agent is a {requiredPlan} feature</h2>
-        <p className="text-sm text-muted-foreground mt-2">
-          Upgrade your plan to chat with your dashboard about visibility, competitors, citations,
-          and content gaps.
-        </p>
+        <h2 className="text-lg font-semibold">{t('planGateTitle', { plan: requiredPlan })}</h2>
+        <p className="text-sm text-muted-foreground mt-2">{t('planGateBody')}</p>
       </div>
     </div>
   );
