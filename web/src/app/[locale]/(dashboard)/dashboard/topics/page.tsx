@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
 import { useBrandStore } from '@/stores/use-brand-store';
 import { useUserRole } from '@/hooks/use-user-role';
@@ -35,16 +36,16 @@ import { toCsv } from '@/lib/csv';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
-function formatRelative(iso: string | null): string {
+function formatRelative(iso: string | null, t: ReturnType<typeof useTranslations>): string {
   if (!iso) return '—';
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
+  if (m < 1) return t('relative.justNow');
+  if (m < 60) return t('relative.minutesAgo', { m });
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
+  if (h < 24) return t('relative.hoursAgo', { h });
   const d = Math.floor(h / 24);
-  if (d < 30) return `${d}d ago`;
+  if (d < 30) return t('relative.daysAgo', { d });
   return new Date(iso).toLocaleDateString();
 }
 
@@ -76,8 +77,6 @@ const TOPIC_EXPORT_HEADERS = [
   'top_competitor_sov',
   'last_run_at',
 ];
-
-const TOPIC_EXPORT_HINT = 'No topics yet - add topics or run a tracking job first.';
 
 // ─── Sparkline ───────────────────────────────────────────────────────────
 
@@ -152,6 +151,7 @@ function KpiCard({
 // ─── Page ────────────────────────────────────────────────────────────────
 
 export default function TopicsPage() {
+  const t = useTranslations('topics');
   const activeBrandId = useBrandStore((s) => s.activeBrandId);
   const activeBrand = useBrandStore(
     (s) => s.brands.find((brand) => brand.id === s.activeBrandId) ?? null,
@@ -254,10 +254,8 @@ export default function TopicsPage() {
         <Card className="max-w-md">
           <CardContent className="pt-6 text-center">
             <Tag className="mx-auto h-10 w-10 text-muted-foreground/50" />
-            <h2 className="mt-3 text-base font-semibold">No brand selected</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Select a brand from the top switcher to view topic analytics.
-            </p>
+            <h2 className="mt-3 text-base font-semibold">{t('noBrandTitle')}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{t('noBrandBody')}</p>
           </CardContent>
         </Card>
       </div>
@@ -269,13 +267,11 @@ export default function TopicsPage() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Topics</h1>
-          <p className="text-muted-foreground text-sm">
-            Topic-level analytics across all tracked prompts (last 30 days)
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight">{t('title')}</h1>
+          <p className="text-muted-foreground text-sm">{t('description')}</p>
         </div>
         <div className="flex items-center gap-2">
-          <span title={!canExport ? TOPIC_EXPORT_HINT : undefined}>
+          <span title={!canExport ? t('exportHint') : undefined}>
             <Button
               type="button"
               variant="outline"
@@ -285,7 +281,7 @@ export default function TopicsPage() {
               disabled={!canExport}
             >
               <Download className="h-4 w-4" />
-              Export CSV
+              {t('exportCsv')}
             </Button>
           </span>
           <Link
@@ -293,7 +289,7 @@ export default function TopicsPage() {
             className={buttonVariants({ variant: 'outline', size: 'sm' })}
           >
             <Settings2 className="h-4 w-4" />
-            Manage topics
+            {t('manageTopics')}
           </Link>
         </div>
       </div>
@@ -309,37 +305,39 @@ export default function TopicsPage() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard
             icon={Layers}
-            label="Tracked topics"
+            label={t('kpi.trackedTopics')}
             value={kpis.total}
             sub={
               unassignedPromptCount > 0
-                ? `${unassignedPromptCount} prompts without a topic`
-                : 'All prompts categorised'
+                ? t('kpi.unassignedPrompts', { count: unassignedPromptCount })
+                : t('kpi.allCategorised')
             }
           />
           <KpiCard
             icon={Trophy}
-            label="Best performer"
+            label={t('kpi.bestPerformer')}
             value={kpis.best ? `${kpis.best.visibilityRate}%` : '—'}
-            sub={kpis.best?.name ?? 'No data yet'}
+            sub={kpis.best?.name ?? t('kpi.noDataYet')}
             tone="positive"
           />
           <KpiCard
             icon={TrendingDown}
-            label="Biggest gap"
+            label={t('kpi.biggestGap')}
             value={kpis.weakest ? `${kpis.weakest.visibilityRate}%` : '—'}
-            sub={kpis.weakest?.name ?? 'No data yet'}
+            sub={kpis.weakest?.name ?? t('kpi.noDataYet')}
             tone="warning"
           />
           <KpiCard
             icon={Flame}
-            label="Top mover (7d)"
+            label={t('kpi.topMover')}
             value={
               kpis.gainer && kpis.gainer.visibilityChange !== null
-                ? `${kpis.gainer.visibilityChange > 0 ? '+' : ''}${kpis.gainer.visibilityChange} pts`
+                ? t('ptsChange', {
+                    value: `${kpis.gainer.visibilityChange > 0 ? '+' : ''}${kpis.gainer.visibilityChange}`,
+                  })
                 : '—'
             }
-            sub={kpis.gainer?.name ?? 'Not enough data'}
+            sub={kpis.gainer?.name ?? t('kpi.notEnoughData')}
             tone={
               kpis.gainer?.visibilityChange && kpis.gainer.visibilityChange >= 0
                 ? 'positive'
@@ -356,10 +354,8 @@ export default function TopicsPage() {
       {/* Leaderboard */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium">Topic leaderboard</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Click a topic to drill into detailed analytics
-          </p>
+          <CardTitle className="text-sm font-medium">{t('leaderboardTitle')}</CardTitle>
+          <p className="text-xs text-muted-foreground">{t('leaderboardHint')}</p>
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
@@ -371,60 +367,61 @@ export default function TopicsPage() {
           ) : topics.length === 0 ? (
             <div className="py-14 text-center text-sm text-muted-foreground">
               <Tag className="mx-auto h-9 w-9 text-muted-foreground/40" />
-              <p className="mt-2">No topics defined yet.</p>
-              <p className="text-xs">
-                Add topics from brand settings to enable topic-based analytics.
-              </p>
+              <p className="mt-2">{t('emptyTitle')}</p>
+              <p className="text-xs">{t('emptyBody')}</p>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="pl-6">Topic</TableHead>
-                  <TableHead className="text-right">Prompts</TableHead>
-                  <TableHead>Visibility (30d)</TableHead>
-                  <TableHead className="text-right">SoV</TableHead>
-                  <TableHead className="text-right">Mentions</TableHead>
-                  <TableHead className="text-right">Citations</TableHead>
-                  <TableHead>Trend</TableHead>
-                  <TableHead>Top competitor</TableHead>
-                  <TableHead className="text-right">Last run</TableHead>
+                  <TableHead className="pl-6">{t('columns.topic')}</TableHead>
+                  <TableHead className="text-right">{t('columns.prompts')}</TableHead>
+                  <TableHead>{t('columns.visibility')}</TableHead>
+                  <TableHead className="text-right">{t('columns.sov')}</TableHead>
+                  <TableHead className="text-right">{t('columns.mentions')}</TableHead>
+                  <TableHead className="text-right">{t('columns.citations')}</TableHead>
+                  <TableHead>{t('columns.trend')}</TableHead>
+                  <TableHead>{t('columns.topCompetitor')}</TableHead>
+                  <TableHead className="text-right">{t('columns.lastRun')}</TableHead>
                   <TableHead className="pr-6 text-right w-[40px]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedByVisibility.map((t) => (
-                  <TableRow key={t.id} className="group hover:bg-muted/50">
+                {sortedByVisibility.map((topic) => (
+                  <TableRow key={topic.id} className="group hover:bg-muted/50">
                     <TableCell className="pl-6 font-medium text-sm">
-                      <Link href={`/dashboard/topics/${t.id}`} className="hover:underline">
-                        {t.name}
+                      <Link href={`/dashboard/topics/${topic.id}`} className="hover:underline">
+                        {topic.name}
                       </Link>
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-sm">
-                      {t.promptCount}
+                      {topic.promptCount}
                     </TableCell>
                     <TableCell className="min-w-[160px]">
-                      {t.activePrompts > 0 ? (
+                      {topic.activePrompts > 0 ? (
                         <div
                           className="flex items-center gap-2"
-                          title={`Appeared in ${t.visiblePrompts} of ${t.activePrompts} prompts`}
+                          title={t('appearedIn', {
+                            visible: topic.visiblePrompts,
+                            active: topic.activePrompts,
+                          })}
                         >
                           <span
                             className={cn(
                               'text-sm font-semibold tabular-nums w-11',
-                              visibilityTextColor(t.visibilityRate),
+                              visibilityTextColor(topic.visibilityRate),
                             )}
                           >
-                            {t.visibilityRate}%
+                            {topic.visibilityRate}%
                           </span>
                           <div className="h-1.5 flex-1 max-w-[90px] rounded-full bg-muted overflow-hidden">
                             <div
                               className={cn(
                                 'h-full rounded-full',
-                                visibilityBarColor(t.visibilityRate),
+                                visibilityBarColor(topic.visibilityRate),
                               )}
                               style={{
-                                width: `${Math.min(100, t.visibilityRate)}%`,
+                                width: `${Math.min(100, topic.visibilityRate)}%`,
                               }}
                             />
                           </div>
@@ -434,36 +431,39 @@ export default function TopicsPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-sm">
-                      {t.shareOfVoice > 0 ? `${t.shareOfVoice}%` : '—'}
+                      {topic.shareOfVoice > 0 ? `${topic.shareOfVoice}%` : '—'}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-sm">
-                      {t.totalMentions.toLocaleString()}
+                      {topic.totalMentions.toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-sm">
-                      {t.totalCitations.toLocaleString()}
+                      {topic.totalCitations.toLocaleString()}
                     </TableCell>
                     <TableCell>
-                      {t.trendSparkline.length > 0 && t.trendSparkline.some((v) => v > 0) ? (
+                      {topic.trendSparkline.length > 0 &&
+                      topic.trendSparkline.some((v) => v > 0) ? (
                         <div className="flex items-center gap-2">
-                          <Sparkline points={t.trendSparkline} />
-                          {t.visibilityChange !== null && t.visibilityChange !== 0 && (
+                          <Sparkline points={topic.trendSparkline} />
+                          {topic.visibilityChange !== null && topic.visibilityChange !== 0 && (
                             <span
                               className={cn(
                                 'text-xs font-medium tabular-nums',
-                                t.visibilityChange > 0
+                                topic.visibilityChange > 0
                                   ? 'text-emerald-600 dark:text-emerald-400'
                                   : 'text-rose-600 dark:text-rose-400',
                               )}
                             >
-                              {t.visibilityChange > 0 ? (
+                              {topic.visibilityChange > 0 ? (
                                 <TrendingUp className="h-3 w-3 inline mr-0.5" />
                               ) : (
                                 <TrendingDown className="h-3 w-3 inline mr-0.5" />
                               )}
-                              {Math.abs(t.visibilityChange).toFixed(1)} pts
+                              {t('ptsChange', {
+                                value: Math.abs(topic.visibilityChange).toFixed(1),
+                              })}
                             </span>
                           )}
-                          {t.visibilityChange === 0 && (
+                          {topic.visibilityChange === 0 && (
                             <Minus className="h-3 w-3 text-muted-foreground" />
                           )}
                         </div>
@@ -472,22 +472,22 @@ export default function TopicsPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {t.topCompetitor ? (
+                      {topic.topCompetitor ? (
                         <Badge variant="outline" className="text-[10px]">
-                          {t.topCompetitor.name} · {t.topCompetitor.sov}%
+                          {topic.topCompetitor.name} · {topic.topCompetitor.sov}%
                         </Badge>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right text-xs text-muted-foreground">
-                      {formatRelative(t.lastRunAt)}
+                      {formatRelative(topic.lastRunAt, t)}
                     </TableCell>
                     <TableCell className="pr-6 text-right">
                       <Link
-                        href={`/dashboard/topics/${t.id}`}
+                        href={`/dashboard/topics/${topic.id}`}
                         className="inline-flex opacity-0 group-hover:opacity-100 transition-opacity"
-                        aria-label="Open topic details"
+                        aria-label={t('openDetails')}
                       >
                         <ArrowRight className="h-4 w-4 text-muted-foreground" />
                       </Link>

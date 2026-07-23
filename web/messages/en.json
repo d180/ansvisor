@@ -143,6 +143,49 @@
     "neutral": "Neutral",
     "negative": "Negative"
   },
+  "topics": {
+    "noBrandTitle": "No brand selected",
+    "noBrandBody": "Select a brand from the top switcher to view topic analytics.",
+    "title": "Topics",
+    "description": "Topic-level analytics across all tracked prompts (last 30 days)",
+    "exportCsv": "Export CSV",
+    "exportHint": "No topics yet - add topics or run a tracking job first.",
+    "manageTopics": "Manage topics",
+    "kpi": {
+      "trackedTopics": "Tracked topics",
+      "unassignedPrompts": "{count} prompts without a topic",
+      "allCategorised": "All prompts categorised",
+      "bestPerformer": "Best performer",
+      "biggestGap": "Biggest gap",
+      "topMover": "Top mover (7d)",
+      "noDataYet": "No data yet",
+      "notEnoughData": "Not enough data"
+    },
+    "ptsChange": "{value} pts",
+    "leaderboardTitle": "Topic leaderboard",
+    "leaderboardHint": "Click a topic to drill into detailed analytics",
+    "emptyTitle": "No topics defined yet.",
+    "emptyBody": "Add topics from brand settings to enable topic-based analytics.",
+    "columns": {
+      "topic": "Topic",
+      "prompts": "Prompts",
+      "visibility": "Visibility (30d)",
+      "sov": "SoV",
+      "mentions": "Mentions",
+      "citations": "Citations",
+      "trend": "Trend",
+      "topCompetitor": "Top competitor",
+      "lastRun": "Last run"
+    },
+    "appearedIn": "Appeared in {visible} of {active} prompts",
+    "openDetails": "Open topic details",
+    "relative": {
+      "justNow": "just now",
+      "minutesAgo": "{m}m ago",
+      "hoursAgo": "{h}h ago",
+      "daysAgo": "{d}d ago"
+    }
+  },
   "content": {
     "title": "Content Opportunities",
     "description": "AI-powered content recommendations to improve your visibility in AI-generated answers.",
