@@ -308,6 +308,134 @@ export async function listTopicsFor(
   }));
 }
 
+// ── Topic suggestions (#498) ─────────────────────────────────────────────────
+// Read/act on the AI-generated suggestions persisted by #497 (topic_suggestions
+// table). Generation itself stays plan-gated behind the web UI's refresh
+// button — these tools only list, accept, or dismiss what already exists.
+
+export interface TopicSuggestionRow {
+  id: string;
+  name: string;
+  reason: string | null;
+  generated_at: string;
+}
+
+/**
+ * List pending (status = 'new') topic suggestions for a brand. Ownership is
+ * checked the same way as listTopicsFor — a wrong-org or missing brand id
+ * returns null before any suggestion row is read.
+ */
+export async function listTopicSuggestionsFor(
+  auth: McpAuthContext,
+  brandId: string,
+): Promise<TopicSuggestionRow[] | null> {
+  if (!auth.organizationId) return null;
+
+  const { data: brand } = await supabaseAdmin
+    .from('brands')
+    .select('id')
+    .eq('id', brandId)
+    .eq('organization_id', auth.organizationId)
+    .maybeSingle();
+  if (!brand) return null;
+
+  const { data, error } = await supabaseAdmin
+    .from('topic_suggestions')
+    .select('id, name, reason, generated_at')
+    .eq('brand_id', brandId)
+    .eq('status', 'new')
+    .order('generated_at', { ascending: false });
+  if (error) throw new Error(error.message);
+
+  return (data ?? []) as TopicSuggestionRow[];
+}
+
+export interface DismissedTopicSuggestion {
+  id: string;
+  status: 'dismissed';
+}
+
+/**
+ * Dismiss a pending suggestion so it never reappears in future refreshes.
+ * Scoped to status = 'new' so dismissing an already-decided suggestion (added
+ * or already dismissed) is a no-op that returns null rather than silently
+ * "succeeding" twice.
+ */
+export async function dismissTopicSuggestionFor(
+  auth: McpAuthContext,
+  suggestionId: string,
+): Promise<DismissedTopicSuggestion | null> {
+  if (!auth.organizationId) return null;
+
+  const { data: ownership } = await supabaseAdmin
+    .from('topic_suggestions')
+    .select('id, status, brands!inner(organization_id)')
+    .eq('id', suggestionId)
+    .eq('brands.organization_id', auth.organizationId)
+    .eq('status', 'new')
+    .maybeSingle();
+  if (!ownership) return null;
+
+  const { data, error } = await supabaseAdmin
+    .from('topic_suggestions')
+    .update({ status: 'dismissed', updated_at: new Date().toISOString() })
+    .eq('id', suggestionId)
+    .select('id, status')
+    .single();
+  if (error) throw new Error(error.message);
+
+  return { id: data.id, status: 'dismissed' };
+}
+
+export interface AcceptedTopicSuggestion {
+  suggestion_id: string;
+  topic_id: string;
+  topic_name: string;
+}
+
+/**
+ * Accept a suggestion: create exactly ONE topic via a singular insert (never
+ * a bulk replace of the brand's topic list — mirrors the web app's
+ * createTopic action), then mark the suggestion added with a pointer to the
+ * new topic. Scoped to status = 'new' up front, so accepting the same
+ * suggestion twice fails the ownership lookup on the second call instead of
+ * creating a second topic.
+ */
+export async function acceptTopicSuggestionFor(
+  auth: McpAuthContext,
+  suggestionId: string,
+): Promise<AcceptedTopicSuggestion | null> {
+  if (!auth.organizationId) return null;
+
+  const { data: suggestion } = await supabaseAdmin
+    .from('topic_suggestions')
+    .select('id, brand_id, name, brands!inner(organization_id)')
+    .eq('id', suggestionId)
+    .eq('brands.organization_id', auth.organizationId)
+    .eq('status', 'new')
+    .maybeSingle();
+  if (!suggestion) return null;
+
+  const { data: topic, error: topicErr } = await supabaseAdmin
+    .from('topics')
+    .insert({ brand_id: suggestion.brand_id, name: suggestion.name.trim() })
+    .select('id, name')
+    .single();
+  if (topicErr) throw new Error(topicErr.message);
+
+  const { error: updateErr } = await supabaseAdmin
+    .from('topic_suggestions')
+    .update({
+      status: 'added',
+      added_topic_id: topic.id,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', suggestionId);
+  if (updateErr) throw new Error(updateErr.message);
+
+  return { suggestion_id: suggestionId, topic_id: topic.id, topic_name: topic.name };
+}
+
 // ── Prompts ───────────────────────────────────────────────────────────────────
 
 export interface PromptRow {

@@ -4,6 +4,8 @@ import { z } from 'zod';
 import type { McpAuthContext } from '@/lib/mcp-auth';
 import {
   CONTENT_OPPORTUNITY_STATUSES,
+  acceptTopicSuggestionFor,
+  dismissTopicSuggestionFor,
   generateBriefFor,
   getCompetitorComparisonFor,
   getContentOpportunityFor,
@@ -14,6 +16,7 @@ import {
   listContentOpportunitiesFor,
   listPromptsFor,
   listTopicsFor,
+  listTopicSuggestionsFor,
   updateOpportunityStatusFor,
   getAiTrafficFor,
   getPromptVolumesFor,
@@ -171,6 +174,79 @@ export function createMcpServer(auth: McpAuthContext): McpServer {
       }
       return {
         content: [{ type: 'text', text: JSON.stringify(prompts, null, 2) }],
+      };
+    },
+  );
+
+  server.registerTool(
+    'list_topic_suggestions',
+    {
+      description:
+        'List pending AI-generated topic suggestions for a brand (id, name, reason, and when they were generated). These are suggestions awaiting a decision — already accepted or dismissed suggestions never appear here. Generating new suggestions is not available via MCP; use accept_topic_suggestion or dismiss_topic_suggestion to act on what is already pending.',
+      inputSchema: {
+        brand_id: relaxedUuid.describe('Brand UUID, from list_brands.'),
+      },
+    },
+    async (args) => {
+      const suggestions = await listTopicSuggestionsFor(auth, args.brand_id);
+      if (suggestions === null) {
+        return {
+          content: [{ type: 'text', text: 'Brand not found' }],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: 'text', text: JSON.stringify(suggestions, null, 2) }],
+      };
+    },
+  );
+
+  server.registerTool(
+    'accept_topic_suggestion',
+    {
+      description:
+        'Accept a pending topic suggestion: creates exactly one new topic from it and marks the suggestion as added. Only fire on explicit user intent for a specific suggestion (from list_topic_suggestions), never as part of an exploratory query. Accepting the same suggestion twice fails cleanly — it is not accepted or already decided — no duplicate topic is created.',
+      inputSchema: {
+        suggestion_id: relaxedUuid.describe('Topic suggestion UUID, from list_topic_suggestions.'),
+      },
+    },
+    async (args) => {
+      const result = await acceptTopicSuggestionFor(auth, args.suggestion_id);
+      if (!result) {
+        return {
+          content: [
+            { type: 'text', text: 'Suggestion not found, not pending, or already processed' },
+          ],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
+    },
+  );
+
+  server.registerTool(
+    'dismiss_topic_suggestion',
+    {
+      description:
+        'Dismiss a pending topic suggestion so it never reappears in future suggestion batches. Only fire on explicit user intent for a specific suggestion (from list_topic_suggestions), never as part of an exploratory query.',
+      inputSchema: {
+        suggestion_id: relaxedUuid.describe('Topic suggestion UUID, from list_topic_suggestions.'),
+      },
+    },
+    async (args) => {
+      const result = await dismissTopicSuggestionFor(auth, args.suggestion_id);
+      if (!result) {
+        return {
+          content: [
+            { type: 'text', text: 'Suggestion not found, not pending, or already processed' },
+          ],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
       };
     },
   );
