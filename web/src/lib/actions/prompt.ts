@@ -49,6 +49,12 @@ function mapPromptRow(row: Record<string, unknown>): Prompt {
     regions: (row.regions as string[]) ?? [],
     models: (row.models as string[]) ?? [],
     isActive: row.is_active as boolean,
+    workStatus: (row.work_status as Prompt['workStatus']) ?? null,
+    targetUrlCount: Array.isArray(row.prompt_target_urls) ? row.prompt_target_urls.length : 0,
+    citedUrlCount: Array.isArray(row.prompt_target_urls)
+      ? (row.prompt_target_urls as { cited_count: number }[]).filter((t) => t.cited_count > 0)
+          .length
+      : 0,
     createdAt: row.created_at as string,
   };
 }
@@ -122,7 +128,7 @@ export async function getPromptSets(brandId: string): Promise<PromptSet[]> {
 
   const { data, error } = await supabase
     .from('prompt_sets')
-    .select('*, prompts(*)')
+    .select('*, prompts(*, prompt_target_urls(cited_count))')
     .eq('brand_id', brandId)
     .order('created_at', { ascending: false });
 
